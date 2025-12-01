@@ -1,6 +1,6 @@
 {
 	"name": "shai-hulud-detector",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"description": "GitHub Action to detect Shai-Hulud 2.0 supply chain attack in npm dependencies",
 	"main": "dist/index.js",
 	"scripts": {
