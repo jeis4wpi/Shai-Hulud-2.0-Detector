@@ -4,6 +4,11 @@ export interface PackageEntry {
   affectedVersions: string[];
 }
 
+export interface FileHash {
+  sha1?: string;
+  sha256: string | string[];
+}
+
 export interface MasterPackages {
   version: string;
   lastUpdated: string;
@@ -16,11 +21,17 @@ export interface MasterPackages {
   indicators: {
     maliciousFiles: string[];
     maliciousWorkflows: string[];
-    fileHashes: Record<string, string>;
+    fileHashes: Record<string, FileHash>;
     gitHubIndicators: {
       runnerName: string;
       repoDescription: string;
+      repoNamePattern?: string;
+      workflowTrigger?: string;
     };
+    runnerPaths?: string[];
+    credentialPaths?: string[];
+    primaryInfectionVectors?: string[];
+    mavenPackages?: string[];
   };
   stats: {
     totalUniquePackages: number;
@@ -28,6 +39,12 @@ export interface MasterPackages {
   };
   packages: PackageEntry[];
   sources: string[];
+  acknowledgements?: {
+    securityResearchers: Array<{
+      org: string;
+      github: string;
+    }>;
+  };
 }
 
 export interface ScanResult {
@@ -46,7 +63,10 @@ export type SecurityFindingType =
   | 'trufflehog-activity'
   | 'shai-hulud-repo'
   | 'secrets-exfiltration'
-  | 'malicious-runner';
+  | 'malicious-runner'
+  | 'malware-hash-match'
+  | 'runner-installation'
+  | 'malicious-workflow-trigger';
 
 export interface SecurityFinding {
   type: SecurityFindingType;

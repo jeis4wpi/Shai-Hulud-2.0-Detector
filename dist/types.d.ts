@@ -3,6 +3,10 @@ export interface PackageEntry {
     severity: 'critical' | 'high' | 'medium' | 'low';
     affectedVersions: string[];
 }
+export interface FileHash {
+    sha1?: string;
+    sha256: string | string[];
+}
 export interface MasterPackages {
     version: string;
     lastUpdated: string;
@@ -15,11 +19,17 @@ export interface MasterPackages {
     indicators: {
         maliciousFiles: string[];
         maliciousWorkflows: string[];
-        fileHashes: Record<string, string>;
+        fileHashes: Record<string, FileHash>;
         gitHubIndicators: {
             runnerName: string;
             repoDescription: string;
+            repoNamePattern?: string;
+            workflowTrigger?: string;
         };
+        runnerPaths?: string[];
+        credentialPaths?: string[];
+        primaryInfectionVectors?: string[];
+        mavenPackages?: string[];
     };
     stats: {
         totalUniquePackages: number;
@@ -27,6 +37,12 @@ export interface MasterPackages {
     };
     packages: PackageEntry[];
     sources: string[];
+    acknowledgements?: {
+        securityResearchers: Array<{
+            org: string;
+            github: string;
+        }>;
+    };
 }
 export interface ScanResult {
     package: string;
@@ -36,7 +52,7 @@ export interface ScanResult {
     isDirect: boolean;
     location: string;
 }
-export type SecurityFindingType = 'compromised-package' | 'suspicious-script' | 'trufflehog-activity' | 'shai-hulud-repo' | 'secrets-exfiltration' | 'malicious-runner';
+export type SecurityFindingType = 'compromised-package' | 'suspicious-script' | 'trufflehog-activity' | 'shai-hulud-repo' | 'secrets-exfiltration' | 'malicious-runner' | 'malware-hash-match' | 'runner-installation' | 'malicious-workflow-trigger';
 export interface SecurityFinding {
     type: SecurityFindingType;
     severity: 'critical' | 'high' | 'medium' | 'low';

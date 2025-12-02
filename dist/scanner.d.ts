@@ -127,6 +127,21 @@ export declare function checkAffectedNamespaces(filePath: string): SecurityFindi
  */
 export declare function checkSuspiciousBranches(directory: string): SecurityFinding[];
 /**
+ * Check files against known SHA256 hashes of Shai-Hulud malware variants.
+ * Scans for setup_bun.js and bun_environment.js files and matches their hashes
+ * against the Datadog Security Labs IOC database.
+ * @param directory Root directory to scan.
+ * @returns SecurityFinding list (critical severity).
+ */
+export declare function checkMalwareHashes(directory: string): SecurityFinding[];
+/**
+ * Check for Shai-Hulud runner installation artifacts including the .dev-env directory
+ * and specific GitHub Actions runner versions used by the attack.
+ * @param directory Root directory to scan.
+ * @returns SecurityFinding list (critical severity).
+ */
+export declare function checkRunnerInstallation(directory: string): SecurityFinding[];
+/**
  * Orchestrate full scan: package.json files, optional lockfiles, and advanced security
  * checks (scripts, TruffleHog activity, exfiltration files, malicious runners, repo refs,
  * suspicious branches). Aggregates and de-duplicates findings, returning a structured summary.
@@ -168,10 +183,16 @@ export declare function getMasterPackagesInfo(): {
     indicators: {
         maliciousFiles: string[];
         maliciousWorkflows: string[];
-        fileHashes: Record<string, string>;
+        fileHashes: Record<string, import("./types").FileHash>;
         gitHubIndicators: {
             runnerName: string;
             repoDescription: string;
+            repoNamePattern?: string;
+            workflowTrigger?: string;
         };
+        runnerPaths?: string[];
+        credentialPaths?: string[];
+        primaryInfectionVectors?: string[];
+        mavenPackages?: string[];
     };
 };

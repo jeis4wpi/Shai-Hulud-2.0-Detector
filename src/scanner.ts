@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import SemVer from 'semver/classes/semver';
@@ -113,6 +114,43 @@ const MALICIOUS_WORKFLOW_PATTERNS = [
 	{
 		pattern: /discussion\.ya?ml$/i,
 		description: 'Shai-Hulud discussion workflow',
+	},
+];
+
+// Malicious workflow trigger patterns (content-based detection)
+const MALICIOUS_WORKFLOW_TRIGGERS = [
+	{
+		pattern: /on:\s*discussion\b/i,
+		description: 'Discussion event trigger (used for command injection backdoor)',
+	},
+	{
+		pattern: /on:\s*\[?\s*discussion\s*\]?/i,
+		description: 'Discussion event in workflow trigger array',
+	},
+];
+
+// Known SHA256 hashes of malicious files (from Datadog Security Labs)
+const KNOWN_MALWARE_HASHES: Record<string, string[]> = {
+	'setup_bun.js': ['a3894003ad1d293ba96d77881ccd2071446dc3f65f434669b49b3da92421901a'],
+	'bun_environment.js': [
+		'62ee164b9b306250c1172583f138c9614139264f889fa99614903c12755468d0',
+		'cbb9bc5a8496243e02f3cc080efbe3e4a1430ba0671f2e43a202bf45b05479cd',
+		'f099c5d9ec417d4445a0328ac0ada9cde79fc37410914103ae9c609cbc0ee068',
+		'f1df4896244500671eb4aa63ebb48ea11cee196fafaa0e9874e17b24ac053c02',
+		'9d59fd0bcc14b671079824c704575f201b74276238dc07a9c12a93a84195648a',
+		'e0250076c1d2ac38777ea8f542431daf61fcbaab0ca9c196614b28065ef5b918',
+	],
+};
+
+// Shai-Hulud runner installation paths
+const RUNNER_INSTALLATION_PATTERNS = [
+	{
+		pattern: /\.dev-env\//i,
+		description: 'Shai-Hulud runner installation directory (.dev-env/)',
+	},
+	{
+		pattern: /actions-runner-linux-x64-2\.330\.0/i,
+		description: 'Specific GitHub Actions runner version used by attack',
 	},
 ];
 
@@ -893,6 +931,21 @@ export function checkMaliciousRunners(directory: string): SecurityFinding[] {
 						}
 					}
 
+					// Check for malicious workflow triggers (on: discussion)
+					for (const { pattern, description } of MALICIOUS_WORKFLOW_TRIGGERS) {
+						if (pattern.test(content)) {
+							findings.push({
+								type: 'malicious-runner',
+								severity: 'critical',
+								title: `Malicious workflow trigger: on:discussion`,
+								description: `${description}. The Shai-Hulud attack uses discussion events to trigger command injection backdoors.`,
+								location: fullPath,
+								evidence: pattern.toString(),
+							});
+							break; // Only report once per file
+						}
+					}
+
 					// Check for Shai-Hulud repo patterns in workflow (excluding detector references)
 					for (const { pattern, description } of SHAI_HULUD_REPO_PATTERNS) {
 						if (pattern.test(content)) {
@@ -1085,6 +1138,142 @@ export function checkSuspiciousBranches(directory: string): SecurityFinding[] {
 }
 
 /**
+ * Calculate SHA256 hash of a file for malware signature matching.
+ * @param filePath Path to the file.
+ * @returns SHA256 hash as lowercase hex string, or null on error.
+ */
+function calculateSHA256(filePath: string): string | null {
+	try {
+		const content = fs.readFileSync(filePath);
+		return crypto.createHash('sha256').update(content).digest('hex');
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Check files against known SHA256 hashes of Shai-Hulud malware variants.
+ * Scans for setup_bun.js and bun_environment.js files and matches their hashes
+ * against the Datadog Security Labs IOC database.
+ * @param directory Root directory to scan.
+ * @returns SecurityFinding list (critical severity).
+ */
+export function checkMalwareHashes(directory: string): SecurityFinding[] {
+	const findings: SecurityFinding[] = [];
+	const suspiciousFileNames = Object.keys(KNOWN_MALWARE_HASHES);
+
+	const searchDir = (dir: string, depth: number = 0) => {
+		if (depth > 5) return;
+
+		try {
+			const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+			for (const entry of entries) {
+				const fullPath = path.join(dir, entry.name);
+
+				if (entry.isFile() && suspiciousFileNames.includes(entry.name)) {
+					const hash = calculateSHA256(fullPath);
+					if (hash && KNOWN_MALWARE_HASHES[entry.name]?.includes(hash)) {
+						findings.push({
+							type: 'trufflehog-activity',
+							severity: 'critical',
+							title: `Confirmed Shai-Hulud malware: ${entry.name}`,
+							description: `File "${entry.name}" matches a known SHA256 hash from the Shai-Hulud attack. This is a confirmed malicious payload.`,
+							location: fullPath,
+							evidence: `SHA256: ${hash}`,
+						});
+					}
+				} else if (
+					entry.isDirectory() &&
+					!entry.name.startsWith('.') &&
+					entry.name !== 'node_modules'
+				) {
+					searchDir(fullPath, depth + 1);
+				}
+			}
+		} catch {
+			// Skip directories we can't read
+		}
+	};
+
+	searchDir(directory);
+	return findings;
+}
+
+/**
+ * Check for Shai-Hulud runner installation artifacts including the .dev-env directory
+ * and specific GitHub Actions runner versions used by the attack.
+ * @param directory Root directory to scan.
+ * @returns SecurityFinding list (critical severity).
+ */
+export function checkRunnerInstallation(directory: string): SecurityFinding[] {
+	const findings: SecurityFinding[] = [];
+
+	const searchDir = (dir: string, depth: number = 0) => {
+		if (depth > 5) return;
+
+		try {
+			const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+			for (const entry of entries) {
+				const fullPath = path.join(dir, entry.name);
+
+				// Check for .dev-env directory (runner installation path)
+				if (entry.isDirectory() && entry.name === '.dev-env') {
+					findings.push({
+						type: 'malicious-runner',
+						severity: 'critical',
+						title: `Shai-Hulud runner installation directory: .dev-env`,
+						description: `Found ".dev-env" directory which is used by the Shai-Hulud attack to install rogue GitHub Actions runners. This directory should be investigated and removed.`,
+						location: fullPath,
+					});
+				}
+
+				// Check for runner tarball
+				if (entry.isFile() && /actions-runner-linux-x64-2\.330\.0/i.test(entry.name)) {
+					findings.push({
+						type: 'malicious-runner',
+						severity: 'critical',
+						title: `Shai-Hulud runner artifact: ${entry.name}`,
+						description: `Found GitHub Actions runner archive matching the version used by the Shai-Hulud attack. This file may have been downloaded for malicious runner installation.`,
+						location: fullPath,
+					});
+				}
+
+				if (
+					entry.isDirectory() &&
+					!entry.name.startsWith('.') &&
+					entry.name !== 'node_modules'
+				) {
+					searchDir(fullPath, depth + 1);
+				}
+			}
+		} catch {
+			// Skip directories we can't read
+		}
+	};
+
+	searchDir(directory);
+
+	// Also check home directory for .dev-env if accessible
+	const homeDir = process.env.HOME || process.env.USERPROFILE;
+	if (homeDir) {
+		const devEnvPath = path.join(homeDir, '.dev-env');
+		if (fs.existsSync(devEnvPath)) {
+			findings.push({
+				type: 'malicious-runner',
+				severity: 'critical',
+				title: `Shai-Hulud runner installation in home directory`,
+				description: `Found ".dev-env" directory in home directory (${devEnvPath}). This is the primary installation path for Shai-Hulud rogue runners. Immediate investigation required.`,
+				location: devEnvPath,
+			});
+		}
+	}
+
+	return findings;
+}
+
+/**
  * Orchestrate full scan: package.json files, optional lockfiles, and advanced security
  * checks (scripts, TruffleHog activity, exfiltration files, malicious runners, repo refs,
  * suspicious branches). Aggregates and de-duplicates findings, returning a structured summary.
@@ -1217,6 +1406,26 @@ export function runScan(
 	// Check for suspicious git branches
 	const branchFindings = checkSuspiciousBranches(directory);
 	for (const finding of branchFindings) {
+		const key = `${finding.type}:${finding.location}:${finding.title}`;
+		if (!seenFindings.has(key)) {
+			seenFindings.add(key);
+			allSecurityFindings.push(finding);
+		}
+	}
+
+	// Check for known malware file hashes (SHA256 signature matching)
+	const hashFindings = checkMalwareHashes(directory);
+	for (const finding of hashFindings) {
+		const key = `${finding.type}:${finding.location}:${finding.title}`;
+		if (!seenFindings.has(key)) {
+			seenFindings.add(key);
+			allSecurityFindings.push(finding);
+		}
+	}
+
+	// Check for Shai-Hulud runner installation artifacts
+	const runnerInstallFindings = checkRunnerInstallation(directory);
+	for (const finding of runnerInstallFindings) {
 		const key = `${finding.type}:${finding.location}:${finding.title}`;
 		if (!seenFindings.has(key)) {
 			seenFindings.add(key);
@@ -1380,7 +1589,7 @@ export function generateSarifReport(summary: ScanSummary): SarifResult {
 				tool: {
 					driver: {
 						name: 'shai-hulud-detector',
-						version: '1.0.0',
+						version: '2.0.0',
 						informationUri:
 							'https://github.com/gensecaihq/Shai-Hulud-2.0-Detector',
 						rules,
