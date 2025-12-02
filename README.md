@@ -1198,6 +1198,7 @@ A huge thank you to all the community members who have contributed to this proje
 |---|-------------|---------------|
 | <img src=https://github.com/albe.png width=32 height=32 alt=@albe> | [@albe](https://github.com/albe) | Code contributions, Pull requests |
 | <img src=https://github.com/alokemajumder.png width=32 height=32 alt=@alokemajumder> | [@alokemajumder](https://github.com/alokemajumder) | Code contributions, Issue reports, Pull requests |
+| <img src=https://github.com/buggedcom.png width=32 height=32 alt=@buggedcom> | [@buggedcom](https://github.com/buggedcom) | Discussions |
 | <img src=https://github.com/gaellafond.png width=32 height=32 alt=@gaellafond> | [@gaellafond](https://github.com/gaellafond) | Issue reports |
 | <img src=https://github.com/julia-infocaster.png width=32 height=32 alt=@julia-infocaster> | [@julia-infocaster](https://github.com/julia-infocaster) | Code contributions, Pull requests |
 | <img src=https://github.com/luca-cond.png width=32 height=32 alt=@luca-cond> | [@luca-cond](https://github.com/luca-cond) | Discussions |
